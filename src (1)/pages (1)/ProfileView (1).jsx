@@ -52,38 +52,53 @@ export default function ProfileView() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // File Size Limit: Keep images under 10 MB
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image file size exceeds the 10 MB limit. Please select a smaller photo.");
+      return;
+    }
+
     setUploading(true);
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = async () => {
-        // Compress image using Canvas
+        // Minimum Resolution Check (640 x 640 px)
+        if (img.width < 640 || img.height < 640) {
+          alert("Image resolution is too low. Please upload a photo with at least 640 × 640 pixels.");
+          setUploading(false);
+          return;
+        }
+
+        // Optimal Resolution Targets: 1080x1080 (1:1 Square) or 1080x1350 (4:5 Vertical Portrait)
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 400;
-        const MAX_HEIGHT = 400;
+        const MAX_WIDTH = 1080;
+        const MAX_HEIGHT = 1350;
         let width = img.width;
         let height = img.height;
 
         if (width > height) {
+          // Scale to 1080 width max for landscape/square
           if (width > MAX_WIDTH) {
             height *= MAX_WIDTH / width;
             width = MAX_WIDTH;
           }
         } else {
+          // Scale to 1350 height max for portrait (4:5 aspect ratio)
           if (height > MAX_HEIGHT) {
             width *= MAX_HEIGHT / height;
             height = MAX_HEIGHT;
           }
         }
 
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Convert to Base64 JPEG (heavily compressed to fit in Firestore 1MB limit)
-        const base64Image = canvas.toDataURL('image/jpeg', 0.6);
+        // Convert to crisp JPEG (0.85 quality targeting ideal 1-2 MB performance)
+        const base64Image = canvas.toDataURL('image/jpeg', 0.85);
 
         try {
           // Update profile via API Gateway

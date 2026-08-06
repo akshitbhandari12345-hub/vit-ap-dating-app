@@ -28,13 +28,15 @@ router.get('/feed', async (req, res) => {
     const usersSnapshot = await db.collection('users').get();
     const potentialMatches = [];
 
-    usersSnapshot.forEach(docSnap => {
-      const profileData = docSnap.data();
+    const docsList = usersSnapshot.docs || (Array.isArray(usersSnapshot) ? usersSnapshot : []);
+
+    docsList.forEach(docSnap => {
+      const profileData = typeof docSnap.data === 'function' ? docSnap.data() : docSnap;
       const profileUid = profileData.uid || docSnap.id;
 
       if (profileUid !== currentUid && !swipedUserIds.includes(profileUid)) {
         potentialMatches.push({
-          id: docSnap.id,
+          id: docSnap.id || profileUid,
           ...profileData,
           uid: profileUid,
         });
