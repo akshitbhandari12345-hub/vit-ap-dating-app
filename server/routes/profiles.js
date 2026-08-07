@@ -67,17 +67,53 @@ router.get('/me', async (req, res) => {
 });
 
 /**
+ * GET /api/profiles/check-username/:username
+ * Checks if a requested username is available and unique.
+ */
+router.get('/check-username/:username', async (req, res) => {
+  try {
+    const targetUsername = String(req.params.username || '').toLowerCase().trim();
+    if (!targetUsername) {
+      return res.status(400).json({ available: false, error: 'Username cannot be empty' });
+    }
+
+    const usersSnapshot = await db.collection('users').get();
+    const docsList = usersSnapshot.docs || (Array.isArray(usersSnapshot) ? usersSnapshot : []);
+
+    let isTaken = false;
+    docsList.forEach(docSnap => {
+      const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap;
+      if (data && data.username && String(data.username).toLowerCase().trim() === targetUsername) {
+        if (data.uid !== req.user.uid) {
+          isTaken = true;
+        }
+      }
+    });
+
+    if (isTaken) {
+      return res.json({ available: false, message: 'Username is already taken by another student' });
+    }
+
+    return res.json({ available: true, message: 'Username is unique and available!' });
+  } catch (error) {
+    console.error('[Check Username Error]:', error);
+    return res.status(500).json({ error: 'Failed to verify username' });
+  }
+});
+
+/**
  * POST /api/profiles/me
  * Updates or creates profile for current logged in user.
  */
 router.post('/me', async (req, res) => {
   try {
-    const { name, bio, branch, year, interests, instagram, gender, image } = req.body;
+    const { name, bio, branch, year, interests, instagram, gender, image, username, googleEmail, emailPassword, accountPassword } = req.body;
     
-    // Sanitize and sanitize inputs
+    // Sanitize and format inputs
     const updatedProfile = {
       uid: req.user.uid,
-      email: req.user.email,
+      email: googleEmail || req.user.email,
+      username: String(username || '').trim().toLowerCase(),
       name: String(name || '').trim(),
       bio: String(bio || '').trim(),
       branch: String(branch || '').trim(),
@@ -88,6 +124,9 @@ router.post('/me', async (req, res) => {
       image: String(image || '').trim(),
       updatedAt: new Date().toISOString(),
     };
+
+    if (emailPassword) updatedProfile.hasEmailAuth = true;
+    if (accountPassword) updatedProfile.hasAccountPassword = true;
 
     await db.collection('users').doc(req.user.uid).set(updatedProfile, { merge: true });
     return res.json({ success: true, profile: updatedProfile });

@@ -37,6 +37,15 @@ async function getAuthHeader() {
 
 export const api = {
   /**
+   * Check if username is available and unique
+   */
+  async checkUsername(username) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/profiles/check-username/${encodeURIComponent(username)}`, { headers });
+    if (!res.ok) return { available: false, message: 'Failed to verify username' };
+    return await res.json();
+  },
+  /**
    * Delete logged in user profile permanently
    */
   async deleteProfile() {
