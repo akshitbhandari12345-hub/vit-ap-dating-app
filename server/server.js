@@ -67,7 +67,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`[Zero-Trust API Gateway] Running on port ${PORT}`);
   console.log(`[Architecture] Front-end requests proxied via /api/*`);

@@ -1,0 +1,6 @@
+@echo off
+echo Starting Zero-Trust Backend Gateway...
+start "Backend API Gateway" cmd /k "cd /d c:\Users\akshi\Downloads\project\server && npm start"
+
+echo Starting Vite React Frontend Client...
+start "Frontend React App" cmd /k "cd /d c:\Users\akshi\Downloads\project && npm run dev"

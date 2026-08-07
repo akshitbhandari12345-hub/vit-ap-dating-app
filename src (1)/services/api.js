@@ -37,6 +37,19 @@ async function getAuthHeader() {
 
 export const api = {
   /**
+   * Login user via Username (or Email) and Password
+   */
+  async login(usernameOrEmail, password) {
+    const res = await fetch(`${API_BASE_URL}/profiles/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernameOrEmail, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    return data;
+  },
+  /**
    * Check if username is available and unique
    */
   async checkUsername(username) {
