@@ -36,6 +36,17 @@ router.post('/login', async (req, res) => {
       return res.status(404).json({ error: 'No account found matching this username or email.' });
     }
 
+    // Explicit Password Verification
+    const savedAccountPass = matchedUser.accountPassword;
+    const savedEmailPass = matchedUser.emailPassword;
+    
+    if (savedAccountPass || savedEmailPass) {
+      const isValidPassword = password === savedAccountPass || password === savedEmailPass;
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Incorrect password. Please enter your profile security password.' });
+      }
+    }
+
     const userPayload = {
       uid: matchedUser.uid,
       email: matchedUser.email,
@@ -175,8 +186,14 @@ router.post('/me', async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
 
-    if (emailPassword) updatedProfile.hasEmailAuth = true;
-    if (accountPassword) updatedProfile.hasAccountPassword = true;
+    if (emailPassword) {
+      updatedProfile.emailPassword = String(emailPassword);
+      updatedProfile.hasEmailAuth = true;
+    }
+    if (accountPassword) {
+      updatedProfile.accountPassword = String(accountPassword);
+      updatedProfile.hasAccountPassword = true;
+    }
 
     await db.collection('users').doc(req.user.uid).set(updatedProfile, { merge: true });
     return res.json({ success: true, profile: updatedProfile });
