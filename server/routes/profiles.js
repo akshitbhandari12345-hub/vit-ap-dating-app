@@ -1,12 +1,14 @@
 import express from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { issueTokenPair, rotateRefreshToken, revokeSession } from '../services/tokenService.js';
 
 const router = express.Router();
 
 /**
  * POST /api/profiles/login
  * Authenticates user directly via Username (or Email) and Password.
+ * Issues short-lived access token (15m) + refresh token bound to device fingerprint.
  */
 router.post('/login', async (req, res) => {
   try {
@@ -53,15 +55,62 @@ router.post('/login', async (req, res) => {
       displayName: matchedUser.name || matchedUser.username,
     };
 
+    // Issue 15-Minute Access Token + Single-Use Refresh Token bound to Device Fingerprint
+    const tokens = issueTokenPair(matchedUser.uid, req);
+
     return res.json({
       success: true,
       user: userPayload,
       profile: matchedUser,
-      token: `dev-${matchedUser.uid}`,
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
     });
   } catch (error) {
     console.error('[Login Route Error]:', error);
     return res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+});
+
+/**
+ * POST /api/profiles/refresh
+ * Single-Use Refresh Token Rotation Endpoint (15-min token renewal)
+ */
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    // Rotates refresh token and verifies device fingerprint
+    const newTokens = rotateRefreshToken(refreshToken, req);
+    return res.json({
+      success: true,
+      token: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,
+      expiresIn: newTokens.expiresIn,
+    });
+  } catch (error) {
+    console.error('[Refresh Token Error]:', error.message);
+    return res.status(401).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/profiles/logout
+ * Real-Time Session Revocation (Adds access token to Redis session blocklist & deletes refresh token)
+ */
+router.post('/logout', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const accessToken = authHeader.split('Bearer ')[1] || '';
+    const { refreshToken } = req.body;
+
+    revokeSession(accessToken, refreshToken);
+    return res.json({ success: true, message: 'Session revoked in real-time. Tokens invalidated.' });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to revoke session' });
   }
 });
 

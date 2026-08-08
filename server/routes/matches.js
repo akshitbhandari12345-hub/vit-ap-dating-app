@@ -170,4 +170,51 @@ router.post('/:matchId/messages', async (req, res) => {
   }
 });
 
+// Aggressive Rate Limiter for Typing Indicators & Presence (Prevents metadata leakage / side-channel timing attacks)
+const typingEventMap = new Map(); // key: ${matchId}_${uid} -> lastTimestamp
+
+/**
+ * POST /api/matches/:matchId/typing
+ * Aggressively rate-limited presence & typing indicator event endpoint.
+ */
+router.post('/:matchId/typing', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const currentUid = req.user.uid;
+
+    // Room membership validation
+    const matchDoc = await db.collection('matches').doc(matchId).get();
+    if (!matchDoc.exists) {
+      return res.status(404).json({ error: 'Match thread not found' });
+    }
+
+    const matchData = matchDoc.data();
+    if (!matchData.users.includes(currentUid)) {
+      return res.status(403).json({ error: 'Forbidden: Eavesdropping attempt rejected. Not a channel participant.' });
+    }
+
+    // Aggressive Presence Rate Limiting (max 1 event every 2 seconds)
+    const eventKey = `${matchId}_${currentUid}`;
+    const lastEventTime = typingEventMap.get(eventKey) || 0;
+    const now = Date.now();
+
+    if (now - lastEventTime < 2000) {
+      return res.status(429).json({ error: 'Rate limit exceeded: Typing indicator throttled to prevent metadata leaks.' });
+    }
+
+    typingEventMap.set(eventKey, now);
+
+    return res.json({
+      success: true,
+      typing: true,
+      matchId,
+      user: currentUid,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[Typing Indicator Error]:', error);
+    return res.status(500).json({ error: 'Failed to process typing indicator' });
+  }
+});
+
 export default router;

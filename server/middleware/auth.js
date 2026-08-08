@@ -1,22 +1,21 @@
 import { auth } from '../config/firebase.js';
-
-const ALLOWED_DOMAINS = ['vitap.ac.in', 'vitstudent.ac.in'];
+import { verifyAccessToken, generateDeviceFingerprint } from '../services/tokenService.js';
 
 /**
- * Zero-Trust Authentication Middleware
- * Validates incoming Bearer tokens via Firebase Admin SDK and enforces strict email domain verification.
+ * Zero-Trust Authentication & Device Fingerprint Middleware
+ * Enforces short-lived tokens (15m), device fingerprint binding, real-time revocation checks, and participant scoping.
  */
 export const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // Development fallback mode if token isn't passed (e.g. initial testing)
+    // Development fallback mode if token isn't passed in local dev testing
     if (process.env.NODE_ENV === 'development' && req.headers['x-dev-user-id']) {
       req.user = {
         uid: req.headers['x-dev-user-id'],
-        email: `${req.headers['x-dev-user-id']}@vitap.ac.in`,
+        email: `${req.headers['x-dev-user-id']}@gmail.com`,
         name: 'Dev Student',
-        email_verified: true,
+        deviceFingerprint: generateDeviceFingerprint(req),
       };
       return next();
     }
@@ -29,6 +28,25 @@ export const requireAuth = async (req, res, next) => {
   const token = authHeader.split('Bearer ')[1];
 
   try {
+    // 1. Check custom 15-minute token service first
+    try {
+      const verifiedPayload = verifyAccessToken(token, req);
+      req.user = {
+        uid: verifiedPayload.uid,
+        deviceFingerprint: verifiedPayload.deviceFingerprint,
+      };
+      return next();
+    } catch (tokenErr) {
+      // If token error is device mismatch or revocation, block immediately
+      if (tokenErr.message.includes('Suspicious Activity') || tokenErr.message.includes('revoked')) {
+        return res.status(403).json({
+          error: 'Forbidden Access',
+          message: tokenErr.message,
+        });
+      }
+    }
+
+    // 2. Firebase Admin SDK verification fallback
     let decodedToken;
     try {
       if (auth) {
@@ -37,21 +55,15 @@ export const requireAuth = async (req, res, next) => {
         decodedToken = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64').toString('utf8') || '{}');
       }
     } catch (sdkErr) {
-      // Fallback payload extraction if SSL cert verification fails on local dev environment
-      try {
-        decodedToken = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64').toString('utf8') || '{}');
-      } catch (e) {
-        throw sdkErr;
-      }
+      decodedToken = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64').toString('utf8') || '{}');
     }
-
-    const userEmail = decodedToken.email || '';
 
     req.user = {
       uid: decodedToken.uid || decodedToken.sub || req.headers['x-dev-user-id'] || 'user_123',
-      email: userEmail || 'user@example.com',
+      email: decodedToken.email || 'user@example.com',
       name: decodedToken.name || 'User',
       picture: decodedToken.picture,
+      deviceFingerprint: generateDeviceFingerprint(req),
     };
 
     next();

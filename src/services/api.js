@@ -143,6 +143,19 @@ export const api = {
   },
 
   /**
+   * Send Rate-Limited Typing Indicator Presence Event
+   */
+  async sendTypingIndicator(matchId) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/matches/${matchId}/typing`, {
+      method: 'POST',
+      headers,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
+  /**
    * Call Private Subnet AI Microservice for compatibility & icebreakers
    */
   async getAICompatibility(targetUserId) {
