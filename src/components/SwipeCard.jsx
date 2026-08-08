@@ -39,25 +39,40 @@ export default function SwipeCard({ profile, onSwipe, isTop }) {
       exit={{ opacity: 0, scale: 0.5 }}
       transition={{ duration: 0.3 }}
     >
-      <img src={profile.image} alt={profile.name} className="card-image" draggable="false" />
-      
-      {/* Visual Stamps */}
-      <motion.div className="swipe-stamp stamp-like" style={{ opacity: likeOpacity }}>
-        LIKE
-      </motion.div>
-      <motion.div className="swipe-stamp stamp-nope" style={{ opacity: nopeOpacity }}>
-        NOPE
-      </motion.div>
+      <div 
+        style={{ width: '100%', height: '100%', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none' }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <img 
+          src={profile.image} 
+          alt={profile.name} 
+          className="card-image" 
+          draggable="false" 
+          onDragStart={(e) => e.preventDefault()}
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        />
+        
+        {/* Visual Stamps */}
+        <motion.div className="swipe-stamp stamp-like" style={{ opacity: likeOpacity }}>
+          LIKE
+        </motion.div>
+        <motion.div className="swipe-stamp stamp-nope" style={{ opacity: nopeOpacity }}>
+          NOPE
+        </motion.div>
 
-      <div className="card-overlay">
-        <div className="card-info">
-          <div>
-            <h2 className="card-name">{profile.name}</h2>
-            <p className="card-branch">{profile.branch} • Year {profile.year}</p>
+        <div className="card-overlay">
+          <div className="card-info">
+            <div>
+              <h2 className="card-name">{profile.name}</h2>
+              <p className="card-branch">{profile.branch} • Year {profile.year}</p>
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <MapPin size={12} color="var(--primary)" /> ~1.1 km away (Geofuzzed Privacy)
+              </span>
+            </div>
+            <button className="btn-icon info-btn glass-panel">
+              <Info size={24} color="white" />
+            </button>
           </div>
-          <button className="btn-icon info-btn glass-panel">
-            <Info size={24} color="white" />
-          </button>
         </div>
       </div>
     </motion.div>
