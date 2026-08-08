@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, LogOut, Edit3, Loader, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, LogOut, Edit3, Loader, Trash2, AlertTriangle, Download } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useStore } from '../store';
@@ -16,62 +16,37 @@ export default function ProfileView() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
-      clearStore();
-      navigate('/');
-    } catch (error) {
-      console.error("Logout failed", error);
-      clearStore();
-      navigate('/');
-    }
-  };
+  if (!profile) {
+    return (
+      <div className="profile-container flex-center">
+        <p className="text-muted">No profile found. Please complete setup.</p>
+        <button className="btn-primary" style={{ marginTop: 15 }} onClick={() => navigate('/setup')}>
+          Setup Profile
+        </button>
+      </div>
+    );
+  }
 
-  const handleDeleteProfile = async () => {
-    setDeleting(true);
-    try {
-      await api.deleteProfile();
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
-      clearStore();
-      navigate('/');
-    } catch (error) {
-      console.error("Delete profile failed", error);
-      alert("Failed to delete profile. Please try again.");
-    } finally {
-      setDeleting(false);
-      setShowDeleteModal(false);
-    }
-  };
-
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // File Size Limit: Keep images under 10 MB
     if (file.size > 10 * 1024 * 1024) {
       alert("Image file size exceeds the 10 MB limit. Please select a smaller photo.");
       return;
     }
 
     setUploading(true);
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = async () => {
-        // Minimum Resolution Check (640 x 640 px)
         if (img.width < 640 || img.height < 640) {
-          alert("Image resolution is too low. Please upload a photo with at least 640 × 640 pixels.");
+          alert("Image resolution is too low. Minimum resolution is 640 × 640 pixels.");
           setUploading(false);
           return;
         }
 
-        // Optimal Resolution Targets: 1080x1080 (1:1 Square) or 1080x1350 (4:5 Vertical Portrait)
         const canvas = document.createElement('canvas');
         const MAX_WIDTH = 1080;
         const MAX_HEIGHT = 1350;
@@ -79,13 +54,11 @@ export default function ProfileView() {
         let height = img.height;
 
         if (width > height) {
-          // Scale to 1080 width max for landscape/square
           if (width > MAX_WIDTH) {
             height *= MAX_WIDTH / width;
             width = MAX_WIDTH;
           }
         } else {
-          // Scale to 1350 height max for portrait (4:5 aspect ratio)
           if (height > MAX_HEIGHT) {
             width *= MAX_HEIGHT / height;
             height = MAX_HEIGHT;
@@ -97,18 +70,14 @@ export default function ProfileView() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Convert to crisp JPEG (0.85 quality targeting ideal 1-2 MB performance)
         const base64Image = canvas.toDataURL('image/jpeg', 0.85);
-
         try {
-          // Update profile via API Gateway
-          await api.updateProfile({ ...profile, image: base64Image });
-          
-          // Update Global State
-          setProfile({ ...profile, image: base64Image });
-        } catch (error) {
-          console.error("Error updating profile image via API Gateway:", error);
-          alert("Failed to upload image.");
+          const updated = { ...profile, image: base64Image };
+          await api.updateProfile(updated);
+          setProfile(updated);
+        } catch (err) {
+          console.error("Failed to update photo via API gateway:", err);
+          alert("Failed to update photo.");
         } finally {
           setUploading(false);
         }
@@ -118,59 +87,88 @@ export default function ProfileView() {
     reader.readAsDataURL(file);
   };
 
-  if (!profile) return null;
+  const handleLogout = async () => {
+    try {
+      if (auth) {
+        await signOut(auth);
+      }
+      clearStore();
+      navigate('/');
+    } catch (e) {
+      console.error("Logout failed:", e);
+      clearStore();
+      navigate('/');
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteProfile();
+      if (auth) {
+        await signOut(auth);
+      }
+      clearStore();
+      navigate('/');
+    } catch (e) {
+      console.error("Failed to delete profile:", e);
+      alert("Failed to delete profile. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleGdprDataExport = async () => {
+    try {
+      const data = await api.exportUserData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gdpr_data_export_${profile?.uid || 'user'}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Failed to download GDPR data export: " + e.message);
+    }
+  };
 
   return (
-    <div className="profile-container">
-      <div className="profile-header">
-        <h2 className="heading-2">My Profile</h2>
-        <button className="btn-icon">
-          <Settings size={24} color="var(--text-muted)" />
-        </button>
-      </div>
+    <div className="profile-container animate-fade-in">
+      <div className="profile-card glass-panel" style={{ userSelect: 'none' }} onContextMenu={e => e.preventDefault()}>
+        <div className="profile-image-container">
+          <img src={profile.image} alt={profile.name} className="profile-hero-image" draggable="false" />
+          <input 
+            type="file" 
+            accept="image/*" 
+            ref={fileInputRef} 
+            style={{ display: 'none' }} 
+            onChange={handleImageUpload} 
+          />
+          <button 
+            className="edit-photo-btn glass-panel" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader className="spin" size={18} /> : <Edit3 size={18} />}
+          </button>
+        </div>
 
-      <div className="profile-content">
-        <div className="profile-card glass-panel animate-fade-in">
-          <div className="profile-image-wrapper">
-            {uploading ? (
-              <div className="profile-main-image" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'rgba(0,0,0,0.5)'}}>
-                <Loader className="spin" size={32} color="var(--primary)" />
-              </div>
-            ) : (
-              <img 
-                src={profile.image || 'https://via.placeholder.com/150'} 
-                alt={profile.name} 
-                className="profile-main-image" 
-              />
-            )}
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              onChange={handleImageUpload}
-            />
-            <button 
-              className="edit-image-btn glass-panel" 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              <Edit3 size={18} color="white" />
-            </button>
-          </div>
-
-          <h1 className="profile-name">{profile.name}</h1>
-          <p className="profile-branch text-muted">{profile.branch} • {profile.year} Year</p>
+        <div className="profile-details">
+          <h2 className="heading-2">{profile.name}</h2>
+          <p className="text-muted">{profile.branch} • Year {profile.year}</p>
           
-          <div className="profile-bio-section">
+          <div className="bio-section">
             <h3 className="section-title">About Me</h3>
-            <p className="profile-bio text-muted">
-              {profile.bio || "No bio added yet. Add a bio to get more matches!"}
-            </p>
+            <p className="bio-text">{profile.bio || 'No bio added yet.'}</p>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+          <button className="btn-primary glass-panel" onClick={handleGdprDataExport} style={{ background: 'var(--surface-glass)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <Download size={20} style={{marginRight: '10px'}} /> Download My Data (GDPR Export)
+          </button>
+          
           <button className="btn-primary logout-btn glass-panel" onClick={handleLogout}>
             <LogOut size={20} style={{marginRight: '10px'}} /> Log Out
           </button>
@@ -180,7 +178,7 @@ export default function ProfileView() {
             onClick={() => setShowDeleteModal(true)}
             style={{ background: 'rgba(255, 75, 75, 0.15)', border: '1px solid rgba(255, 75, 75, 0.4)', color: '#ff4b4b' }}
           >
-            <Trash2 size={20} style={{marginRight: '10px'}} /> Delete Profile & Account
+            <Trash2 size={20} style={{marginRight: '10px'}} /> One-Click Delete Profile (GDPR Art. 17)
           </button>
         </div>
       </div>

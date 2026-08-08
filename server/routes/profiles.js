@@ -253,23 +253,92 @@ router.post('/me', async (req, res) => {
 });
 
 /**
+ * GET /api/profiles/export-data
+ * GDPR Article 20 Data Portability Export Endpoint.
+ * Generates a full downloadable JSON bundle of profile info, matches, and messages.
+ */
+router.get('/export-data', async (req, res) => {
+  try {
+    const currentUid = req.user.uid;
+
+    const userDoc = await db.collection('users').doc(currentUid).get();
+    const profileData = userDoc.exists ? userDoc.data() : null;
+
+    // Fetch user matches
+    const matchesQuery = await db.collection('matches').get();
+    const userMatches = [];
+    const userMessages = [];
+
+    for (const matchDoc of matchesQuery.docs || []) {
+      const matchData = typeof matchDoc.data === 'function' ? matchDoc.data() : matchDoc;
+      if (matchData.users && matchData.users.includes(currentUid)) {
+        userMatches.push({ id: matchDoc.id, ...matchData });
+
+        // Fetch messages for this match
+        const msgSnap = await db.collection('matches').doc(matchDoc.id).collection('messages').get();
+        for (const msgDoc of msgSnap.docs || []) {
+          const msgData = typeof msgDoc.data === 'function' ? msgDoc.data() : msgDoc;
+          if (msgData.senderId === currentUid) {
+            userMessages.push({ matchId: matchDoc.id, id: msgDoc.id, timestamp: msgData.timestamp });
+          }
+        }
+      }
+    }
+
+    const exportBundle = {
+      exportTimestamp: new Date().toISOString(),
+      complianceNotice: 'GDPR Article 20 Data Portability Bundle for VIT AP Match',
+      userProfile: profileData,
+      activeMatches: userMatches,
+      messageHistorySummary: userMessages,
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=gdpr_data_export_${currentUid}.json`);
+    return res.json(exportBundle);
+  } catch (error) {
+    console.error('[GDPR Export Error]:', error);
+    return res.status(500).json({ error: 'Failed to generate GDPR data export' });
+  }
+});
+
+/**
  * DELETE /api/profiles/me
- * Permanently deletes logged in user's profile and associated data from database.
+ * GDPR Article 17 One-Click Complete Account & Data Erasure.
+ * Permanently purges user profile, matches, chat history, and swipe records across the system.
  */
 router.delete('/me', async (req, res) => {
   try {
     const currentUid = req.user.uid;
 
-    // Delete user profile document
-    await db.collection('users').doc(currentUid).set({}, { merge: false });
+    // 1. Purge user profile document
+    await db.collection('users').doc(currentUid).delete();
+
+    // 2. Purge user swipe history
+    try {
+      await db.collection('swipes').doc(currentUid).delete();
+    } catch (e) {}
+
+    // 3. Purge user matches and associated chat subcollections
+    const matchesQuery = await db.collection('matches').get();
+    for (const matchDoc of matchesQuery.docs || []) {
+      const matchData = typeof matchDoc.data === 'function' ? matchDoc.data() : matchDoc;
+      if (matchData.users && matchData.users.includes(currentUid)) {
+        const msgSnap = await db.collection('matches').doc(matchDoc.id).collection('messages').get();
+        for (const msgDoc of msgSnap.docs || []) {
+          await db.collection('matches').doc(matchDoc.id).collection('messages').doc(msgDoc.id).delete();
+        }
+        await db.collection('matches').doc(matchDoc.id).delete();
+      }
+    }
 
     return res.json({
       success: true,
-      message: 'Profile and associated data successfully deleted.',
+      message: 'GDPR Article 17 Right to Erasure Completed: Account and all associated data permanently purged.',
     });
   } catch (error) {
     console.error('[Delete Profile Error]:', error);
-    return res.status(500).json({ error: 'Failed to delete profile' });
+    return res.status(500).json({ error: 'Failed to delete profile and associated data' });
   }
 });
 

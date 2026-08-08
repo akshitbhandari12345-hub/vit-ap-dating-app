@@ -137,6 +137,10 @@ export default function ProfileSetup() {
         setError('Please select your branch and year.');
         return;
       }
+      if (!formData.consentGiven) {
+        setError('Please check the explicit consent box for data processing to create your profile.');
+        return;
+      }
       setError('');
       setSaving(true);
       
@@ -301,6 +305,21 @@ export default function ProfileSetup() {
             value={formData.bio}
             onChange={e => setFormData({...formData, bio: e.target.value})}
           />
+
+          {/* GDPR Article 6 & 7 Explicit Consent Notice */}
+          <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <input 
+                type="checkbox" 
+                checked={formData.consentGiven || false}
+                onChange={e => setFormData({...formData, consentGiven: e.target.checked})}
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                I give explicit consent for data processing (matchmaking, ~1.1km location fuzzing, and end-to-end encrypted messaging) under GDPR rules.
+              </span>
+            </label>
+          </div>
         </div>
       )}
 

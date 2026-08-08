@@ -217,4 +217,42 @@ router.post('/:matchId/typing', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/matches/:matchId/unmatch
+ * Immediately purges match connection and ALL associated chat history for both sides.
+ */
+router.delete('/:matchId/unmatch', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const currentUid = req.user.uid;
+
+    const matchDoc = await db.collection('matches').doc(matchId).get();
+    if (!matchDoc.exists) {
+      return res.status(404).json({ error: 'Match thread not found' });
+    }
+
+    const matchData = matchDoc.data();
+    if (!matchData.users.includes(currentUid)) {
+      return res.status(403).json({ error: 'Forbidden: You cannot unmatch a conversation you are not part of.' });
+    }
+
+    // Purge all chat messages in subcollection immediately
+    const messagesSnap = await db.collection('matches').doc(matchId).collection('messages').get();
+    for (const msgDoc of messagesSnap.docs || []) {
+      await db.collection('matches').doc(matchId).collection('messages').doc(msgDoc.id).delete();
+    }
+
+    // Delete match document immediately
+    await db.collection('matches').doc(matchId).delete();
+
+    return res.json({
+      success: true,
+      message: 'Unmatched successfully. All chat history purged permanently for both sides.',
+    });
+  } catch (error) {
+    console.error('[Unmatch Immediate Purge Error]:', error);
+    return res.status(500).json({ error: 'Failed to unmatch and purge data' });
+  }
+});
+
 export default router;

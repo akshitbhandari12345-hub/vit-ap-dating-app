@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, LogOut, Edit3, Loader, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, LogOut, Edit3, Loader, Trash2, AlertTriangle, Download } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useStore } from '../store';
@@ -171,6 +171,10 @@ export default function ProfileView() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+          <button className="btn-primary glass-panel" onClick={handleGdprDataExport} style={{ background: 'var(--surface-glass)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <Download size={20} style={{marginRight: '10px'}} /> Download My Data (GDPR Export)
+          </button>
+          
           <button className="btn-primary logout-btn glass-panel" onClick={handleLogout}>
             <LogOut size={20} style={{marginRight: '10px'}} /> Log Out
           </button>
@@ -180,7 +184,7 @@ export default function ProfileView() {
             onClick={() => setShowDeleteModal(true)}
             style={{ background: 'rgba(255, 75, 75, 0.15)', border: '1px solid rgba(255, 75, 75, 0.4)', color: '#ff4b4b' }}
           >
-            <Trash2 size={20} style={{marginRight: '10px'}} /> Delete Profile & Account
+            <Trash2 size={20} style={{marginRight: '10px'}} /> One-Click Delete Profile (GDPR Art. 17)
           </button>
         </div>
       </div>

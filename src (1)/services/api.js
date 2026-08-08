@@ -59,7 +59,7 @@ export const api = {
     return await res.json();
   },
   /**
-   * Delete logged in user profile permanently
+   * Delete logged in user profile permanently (GDPR Article 17)
    */
   async deleteProfile() {
     const headers = await getAuthHeader();
@@ -180,6 +180,29 @@ export const api = {
       body: JSON.stringify(profileData),
     });
     if (!res.ok) throw new Error('Failed to update profile');
+    return await res.json();
+  },
+
+  /**
+   * Immediately unmatch profile and purge all chat history
+   */
+  async unmatch(matchId) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/matches/${matchId}/unmatch`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!res.ok) throw new Error('Failed to unmatch and purge chat history');
+    return await res.json();
+  },
+
+  /**
+   * GDPR Article 20 Data Portability Export
+   */
+  async exportUserData() {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/profiles/export-data`, { headers });
+    if (!res.ok) throw new Error('Failed to download GDPR data export');
     return await res.json();
   },
 };

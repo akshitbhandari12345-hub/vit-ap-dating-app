@@ -64,12 +64,61 @@ export async function purgeExpiredMessages() {
 }
 
 /**
- * Schedules recurring 24-hour cleanup job
+ * Automated Background Job: Deletes inactive user accounts after 12 months of no login.
+ */
+export async function purgeInactiveAccounts() {
+  if (!db) return;
+
+  console.log('[Account TTL Purge] Checking for inactive accounts (12 months without login)...');
+  const TwelveMonthsAgo = new Date(Date.now() - ONE_YEAR_MS).toISOString();
+  let purgedCount = 0;
+
+  try {
+    const usersSnap = await db.collection('users').get();
+    const docsList = usersSnap.docs || (Array.isArray(usersSnap) ? usersSnap : []);
+
+    for (const docSnap of docsList) {
+      const userData = typeof docSnap.data === 'function' ? docSnap.data() : docSnap;
+      const lastActive = userData.lastLoginAt || userData.updatedAt || userData.createdAt;
+
+      if (lastActive && lastActive < TwelveMonthsAgo) {
+        const uid = userData.uid || docSnap.id;
+        console.log(`[Account TTL Purge] Deleting inactive user: ${uid} (Inactive since ${lastActive})`);
+        
+        // 1. Delete user matches and chat history
+        const matchesQuery = await db.collection('matches').get();
+        for (const matchDoc of matchesQuery.docs || []) {
+          const matchData = typeof matchDoc.data === 'function' ? matchDoc.data() : matchDoc;
+          if (matchData.users && matchData.users.includes(uid)) {
+            await db.collection('matches').doc(matchDoc.id).delete();
+          }
+        }
+
+        // 2. Delete user profile document
+        await db.collection('users').doc(uid).delete();
+        purgedCount++;
+      }
+    }
+
+    console.log(`[Account TTL Purge Completed] Purged ${purgedCount} inactive user account(s).`);
+  } catch (err) {
+    console.error('[Account TTL Purge Error]:', err.message);
+  }
+}
+
+/**
+ * Schedules recurring 24-hour cleanup jobs
  */
 export function scheduleMessageTTLJob() {
-  // Run initial cleanup 10 seconds after server boot
-  setTimeout(purgeExpiredMessages, 10000);
+  // Run initial cleanups 10 seconds after server boot
+  setTimeout(() => {
+    purgeExpiredMessages();
+    purgeInactiveAccounts();
+  }, 10000);
 
-  // Repeat cleanup every 24 hours (86,400,000 ms)
-  setInterval(purgeExpiredMessages, 24 * 60 * 60 * 1000);
+  // Repeat cleanups every 24 hours (86,400,000 ms)
+  setInterval(() => {
+    purgeExpiredMessages();
+    purgeInactiveAccounts();
+  }, 24 * 60 * 60 * 1000);
 }
