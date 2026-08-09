@@ -205,4 +205,18 @@ export const api = {
     if (!res.ok) throw new Error('Failed to download GDPR data export');
     return await res.json();
   },
+
+  /**
+   * Submit privacy-preserving report (captures message metadata context without message content)
+   */
+  async submitReport(targetUserId, matchId, reason, details) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/reports`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ targetUserId, matchId, reason, details }),
+    });
+    if (!res.ok) throw new Error('Failed to submit report');
+    return await res.json();
+  },
 };

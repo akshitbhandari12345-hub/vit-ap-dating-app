@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { encryptAtRest, decryptAtRest } from '../services/encryption.js';
 import { getMessageExpirationDates, isMessageExpired } from '../services/cleanup.js';
 import { validateUserActivityAnomaly } from '../services/securityAudit.js';
+import { isUserShadowbanned } from './reports.js';
 
 const router = express.Router();
 
@@ -135,6 +136,19 @@ router.post('/:matchId/messages', async (req, res) => {
     const matchData = matchDoc.data();
     if (!matchData.users.includes(currentUid)) {
       return res.status(403).json({ error: 'Forbidden: You are not a participant in this chat' });
+    }
+
+    // Shadowban Scammer Interception: Let scammer send messages, but silently discard delivery
+    if (isUserShadowbanned(currentUid)) {
+      return res.json({
+        success: true,
+        message: {
+          id: `sb_${Date.now()}`,
+          senderId: currentUid,
+          timestamp: new Date().toISOString(),
+          text: text.trim(),
+        },
+      });
     }
 
     const rawText = text.trim();

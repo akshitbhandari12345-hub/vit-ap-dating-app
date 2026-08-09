@@ -8,6 +8,7 @@ import profilesRouter from './routes/profiles.js';
 import swipesRouter from './routes/swipes.js';
 import matchesRouter from './routes/matches.js';
 import aiRouter from './routes/ai.js';
+import reportsRouter from './routes/reports.js';
 import { scheduleMessageTTLJob } from './services/cleanup.js';
 
 dotenv.config();
@@ -57,6 +58,7 @@ app.use('/api/profiles', profilesRouter);
 app.use('/api/swipe', swipesRouter);
 app.use('/api/matches', matchesRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/reports', reportsRouter);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
