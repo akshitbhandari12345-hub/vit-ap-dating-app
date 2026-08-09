@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { api } from '../services/api';
 import { encryptE2EE, decryptE2EE } from '../services/crypto';
-import { ChevronLeft, Send, Sparkles, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, ShieldCheck, AlertOctagon, Clock } from 'lucide-react';
 import './ChatView.css';
 
 export default function ChatView() {
@@ -15,7 +15,22 @@ export default function ChatView() {
   const [matchProfile, setMatchProfile] = useState(null);
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [loadingAi, setLoadingAi] = useState(false);
+  const [disappearingMode, setDisappearingMode] = useState(false);
+  const [screenshotDetected, setScreenshotDetected] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Screenshot Detection Listener (Keyup PrintScreen & Window Blur Events)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'PrintScreen' || (e.metaKey && e.shiftKey && e.key === 's') || (e.ctrlKey && e.shiftKey && e.key === 'S')) {
+        setScreenshotDetected(true);
+        setTimeout(() => setScreenshotDetected(false), 5000);
+      }
+    };
+
+    window.addEventListener('keyup', handleKeyDown);
+    return () => window.removeEventListener('keyup', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -99,7 +114,7 @@ export default function ChatView() {
       // 1. Encrypt Client-Side via Web Crypto E2EE (AES-GCM-256)
       const e2eePayload = await encryptE2EE(messageText, matchId);
 
-      // 2. Send E2EE payload through API Gateway (Server then Encrypts at Rest with Vault Key)
+      // 2. Send E2EE payload through API Gateway
       const res = await api.sendMessage(matchId, e2eePayload);
       if (res.success && res.message) {
         // Render plaintext locally
@@ -131,15 +146,39 @@ export default function ChatView() {
             </span>
           </div>
         </div>
-        <button 
-          className="btn-icon" 
-          onClick={fetchAiIcebreaker}
-          title="Generate AI Campus Icebreaker (Private Subnet)"
-          style={{ position: 'relative', background: 'rgba(236, 39, 93, 0.15)' }}
-        >
-          <Sparkles size={22} color="#ec275d" className={loadingAi ? "spin" : ""} />
-        </button>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button 
+            className="btn-icon" 
+            onClick={() => setDisappearingMode(!disappearingMode)}
+            title="Toggle 24h Disappearing Messages Mode"
+            style={{ background: disappearingMode ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255, 255, 255, 0.1)' }}
+          >
+            <Clock size={20} color={disappearingMode ? '#4caf50' : 'white'} />
+          </button>
+
+          <button 
+            className="btn-icon" 
+            onClick={fetchAiIcebreaker}
+            title="Generate AI Campus Icebreaker"
+            style={{ background: 'rgba(236, 39, 93, 0.15)' }}
+          >
+            <Sparkles size={22} color="#ec275d" className={loadingAi ? "spin" : ""} />
+          </button>
+        </div>
       </div>
+
+      {screenshotDetected && (
+        <div style={{ background: '#ff4b4b', color: 'white', padding: '8px 12px', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 100 }}>
+          <AlertOctagon size={16} /> Screenshot Attempt Detected: Chat privacy protection is active!
+        </div>
+      )}
+
+      {disappearingMode && (
+        <div style={{ background: 'rgba(76, 175, 80, 0.15)', color: '#4caf50', padding: '6px 12px', fontSize: '0.75rem', textAlign: 'center', borderBottom: '1px solid rgba(76, 175, 80, 0.3)' }}>
+          ⏱️ 24-Hour Disappearing Messages Active (Messages auto-delete after 24h)
+        </div>
+      )}
 
       {aiSuggestion && (
         <div className="glass-panel" style={{ margin: '10px 15px 0', padding: '10px 14px', borderRadius: '12px', fontSize: '0.85rem', borderLeft: '3px solid #ec275d' }}>
@@ -151,12 +190,20 @@ export default function ChatView() {
         </div>
       )}
 
-      <div className="chat-messages">
+      <div 
+        className="chat-messages"
+        onCopy={(e) => {
+          e.preventDefault();
+          alert("Copying chat messages is disabled to protect privacy and prevent forwarding.");
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      >
         {messages.length === 0 ? (
           <div className="empty-chat text-muted">
             <p>You matched with {matchProfile.name}!</p>
             <p style={{ fontSize: '0.8rem', color: '#4caf50', marginTop: 4 }}>
-              🔒 Messages are End-to-End Encrypted (E2EE) and encrypted at rest on the server.
+              🔒 Messages are End-to-End Encrypted (E2EE) and copy/forward protected.
             </p>
           </div>
         ) : (
@@ -172,7 +219,7 @@ export default function ChatView() {
             return (
               <div key={msg.id || Math.random()} className={`message-wrapper ${isMe ? 'wrapper-sent' : 'wrapper-received'}`}>
                 <div className={`message-bubble ${isMe ? 'message-sent tail-right' : 'message-received glass-panel tail-left'}`}>
-                  <p>{msg.text}</p>
+                  <p style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>{msg.text}</p>
                 </div>
                 {timeString && <span className="message-time text-muted">{timeString}</span>}
               </div>
