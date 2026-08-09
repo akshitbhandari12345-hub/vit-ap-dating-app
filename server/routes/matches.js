@@ -3,6 +3,7 @@ import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptAtRest, decryptAtRest } from '../services/encryption.js';
 import { getMessageExpirationDates, isMessageExpired } from '../services/cleanup.js';
+import { validateUserActivityAnomaly } from '../services/securityAudit.js';
 
 const router = express.Router();
 
@@ -117,6 +118,9 @@ router.post('/:matchId/messages', async (req, res) => {
     const { matchId } = req.params;
     const { text } = req.body;
     const currentUid = req.user.uid;
+
+    // Check message volume anomaly spike
+    validateUserActivityAnomaly(currentUid, req, 'SEND_MESSAGE');
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'Message text cannot be empty' });
